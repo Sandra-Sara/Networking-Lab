@@ -1,81 +1,110 @@
 import java.io.*;
 import java.net.*;
-public class FileServer {
-    private static final int SERVER_PORT = 5000;
+
+public class Server {
 
     public static void main(String[] args) {
-        try (ServerSocket serverSocket = new ServerSocket(SERVER_PORT)) {
-            System.out.println("File Server started on port " + SERVER_PORT);
+        final int PORT = 5004;
+
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            System.out.println("Server started on port " + PORT);
 
             while (true) {
-                // Accept new client connections
                 Socket clientSocket = serverSocket.accept();
-                System.out.println("Client connected: " + clientSocket);
-
-                // Create new thread for each client
+                System.out.println("Client connected: " + clientSocket.getInetAddress());
                 new ClientHandler(clientSocket).start();
             }
+
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("Server error: " + e.getMessage());
         }
     }
 }
 
-// Thread class for handling multiple clients
 class ClientHandler extends Thread {
-    private Socket socket;
+    private Socket clientSocket;
 
     public ClientHandler(Socket socket) {
-        this.socket = socket;
+        this.clientSocket = socket;
     }
 
     @Override
     public void run() {
         try (
-            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-            DataOutputStream dataOut = new DataOutputStream(socket.getOutputStream());
+            BufferedReader clientReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            BufferedWriter clientWriter = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
+            DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream())
         ) {
-            // Step 6: Prompt client for file name
-            writer.write("Enter the file name you want to download:\n");
-            writer.flush();
+            clientWriter.write("Connected to the file server.");
+            clientWriter.newLine();
+            clientWriter.flush();
 
-            // Step 7: Read file name
-            String fileName = reader.readLine();
-            System.out.println("Client requested: " + fileName);
+            String command;
+            while ((command = clientReader.readLine()) != null) {
+                if (command.equalsIgnoreCase("quit")) {
+                    clientWriter.write("Goodbye!");
+                    clientWriter.newLine();
+                    clientWriter.flush();
+                    break;
+                } else if (command.equalsIgnoreCase("list")) {
+                    File dir = new File("server_files/");
+                    File[] files = dir.listFiles();
+                    if (files != null && files.length > 0) {
+                        for (File file : files) {
+                            if (file.isFile()) {
+                                clientWriter.write(file.getName());
+                                clientWriter.newLine();
+                            }
+                        }
+                    } else {
+                        clientWriter.write("No files found.");
+                        clientWriter.newLine();
+                    }
+                    clientWriter.flush();
+                } else if (command.startsWith("request ")) {
+                    String fileName = command.substring(8)
+                    .trim();
+                    File file = new File("server_files/" + fileName);
+                    if (file.exists() && file.isFile()) {
+                        clientWriter.write("FOUND");
+                        clientWriter.newLine();
+                        clientWriter.flush();
 
-            File file = new File(fileName);
+                        long fileSize = file.length();
+                        dos.writeLong(fileSize);
 
-            // Step 8: Check if file exists
-            if (file.exists() && file.isFile()) {
-                writer.write("FOUND\n");
-                writer.flush();
+                        try (FileInputStream fis = new FileInputStream(file)) {
+                            byte[] buffer = new byte[4096];
+                            int bytesRead;
+                            while ((bytesRead = fis.read(buffer)) != -1) {
+                                dos.write(buffer, 0, bytesRead);
+                            }
+                            dos.flush();
+                        }
 
-                // Send file size
-                long fileSize = file.length();
-                dataOut.writeLong(fileSize);
-
-                // Send file content
-                FileInputStream fileIn = new FileInputStream(file);
-                byte[] buffer = new byte[4096];
-                int bytesRead;
-
-                while ((bytesRead = fileIn.read(buffer)) != -1) {
-                    dataOut.write(buffer, 0, bytesRead);
+                        System.out.println("File sent: " + fileName);
+                    } else {
+                        clientWriter.write("NOT_FOUND");
+                        clientWriter.newLine();
+                        clientWriter.flush();
+                        System.out.println("File not found: " + fileName);
+                    }
+                } else {
+                    clientWriter.write("Invalid command. Use: list, request <filename>, or quit.");
+                    clientWriter.newLine();
+                    clientWriter.flush();
                 }
-
-                fileIn.close();
-                System.out.println("File " + fileName + " sent successfully.");
-            } else {
-                writer.write("NOT_FOUND\n");
-                writer.flush();
-                System.out.println("File not found: " + fileName);
             }
 
-            socket.close();
-
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("ClientHandler error: " + e.getMessage());
+        } finally {
+            try {
+                clientSocket.close();
+                System.out.println("Client connection closed.");
+            } catch (IOException e) {
+                System.out.println("Error closing client socket: " + e.getMessage());
+            }
         }
     }
 }
