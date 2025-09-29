@@ -11,12 +11,14 @@ public class HttpFileClient {
         Scanner scanner = new Scanner(System.in);
 
         while (true) {
-            System.out.print("Enter command (download <filename>, upload <filename>, quit): ");
+            System.out.print("Enter command (list, download <filename>, upload <filename>, quit): ");
             String command = scanner.nextLine();
 
             if (command.equalsIgnoreCase("quit")) {
                 System.out.println("Exiting client...");
                 break;
+            } else if (command.equalsIgnoreCase("list")) {
+                listFiles();
             } else if (command.startsWith("download ")) {
                 String fileName = command.substring(9).trim();
                 downloadFile(fileName);
@@ -28,6 +30,20 @@ public class HttpFileClient {
             }
         }
         scanner.close();
+    }
+
+    private static void listFiles() throws IOException {
+        URL url = new URL(SERVER_URL + "/list");
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("GET");
+
+        BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+        String line;
+        System.out.println("Files on server:");
+        while ((line = reader.readLine()) != null) {
+            System.out.println(" - " + line);
+        }
+        reader.close();
     }
 
     private static void downloadFile(String fileName) throws IOException {
@@ -51,16 +67,16 @@ public class HttpFileClient {
 
             fos.close();
             is.close();
-            System.out.println("File downloaded to client_files/" + fileName);
+            System.out.println(" File downloaded to client_files/" + fileName);
         } else {
-            System.out.println("File not found on server.");
+            System.out.println(" File not found on server.");
         }
     }
 
     private static void uploadFile(String fileName) throws IOException {
         File file = new File(fileName);
         if (!file.exists()) {
-            System.out.println("File does not exist locally.");
+            System.out.println(" File does not exist locally.");
             return;
         }
 
@@ -74,10 +90,9 @@ public class HttpFileClient {
         Files.copy(file.toPath(), os);
         os.close();
 
-        InputStream is = connection.getInputStream();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
         String response = reader.readLine();
         reader.close();
-        System.out.println(response);
+        System.out.println(" " + response);
     }
 }
